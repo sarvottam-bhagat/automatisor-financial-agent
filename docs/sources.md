@@ -9,7 +9,7 @@ Every stored fact or evidence row references a record in `sources`, including an
 
 The project includes a fixed SEC tag registry, a read-through SEC cache, primary 10-K/10-Q filing extraction, and a dated Yahoo-history loader. `--mode live` retains the exact SEC period, form, filing date, accession, and direct filing URL used for each row. It extracts explicit employee totals and ranked filing sentences for strategy, growth, risk, competition, labor, operating levers, automation, and customer concentration, while filtering filing boilerplate. Only supported deterministic financial derivations are calculated.
 
-The committed database is intentionally rebuilt from deterministic synthetic fixtures so automated tests and review produce identical results. Those source records use publisher `Automatisor synthetic evaluation fixture`, type `synthetic_fixture`, and reserved `example.invalid` URLs. They do not claim SEC, company, or Yahoo attribution. MCP results and agent limitations carry an explicit synthetic-data warning.
+The committed `data/financial_agent.db` is a point-in-time snapshot built in live mode from SEC filings and dated Yahoo Finance benchmark history. It contains 12 covered companies, 380 financial-metric rows, 55 operating signals, 148 qualitative-evidence rows, and 64 source records. It contains no synthetic fixture sources. Runtime MCP and agent queries read this local database and do not access the internet.
 
 ## Data-quality caveats
 

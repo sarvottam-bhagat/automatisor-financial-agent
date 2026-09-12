@@ -313,26 +313,61 @@ class FinancialRepository:
         invalid_topics = sorted(set(topics) - ALLOWED_TOPICS)
         if invalid_topics:
             raise RepositoryError("invalid_metric", f"Unsupported topics: {', '.join(invalid_topics)}")
-        conditions = ["c.sector = ?", "(lower(q.statement) LIKE ? OR lower(q.topic) LIKE ?)"]
-        parameters: list[Any] = [sector, f"%{query.lower()}%", f"%{query.lower()}%"]
+        conditions = ["c.sector = ?"]
+        parameters: list[Any] = [sector]
+        normalized_query = query.strip().casefold()
+        if normalized_query:
+            conditions.append("(lower(q.statement) LIKE ? OR lower(q.topic) LIKE ?)")
+            parameters.extend([f"%{normalized_query}%", f"%{normalized_query}%"])
         if company_ids:
             conditions.append(f"q.company_id IN ({', '.join('?' for _ in company_ids)})")
             parameters.extend(company_ids)
         if topics:
             conditions.append(f"q.topic IN ({', '.join('?' for _ in topics)})")
             parameters.extend(topics)
-        parameters.append(limit)
-        rows = await self._fetchall(
-            f"""
+        async def fetch(
+            active_conditions: list[str],
+            active_parameters: list[Any],
+        ) -> list[dict[str, Any]]:
+            return await self._fetchall(
+                f"""
             SELECT q.company_id, c.name, c.ticker, q.topic, q.statement, q.scope, q.period,
                    q.source_id, s.publisher, s.title, s.url, s.source_type, s.retrieved_date
             FROM qualitative_evidence q
             JOIN companies c ON c.id = q.company_id
             JOIN sources s ON s.id = q.source_id
-            WHERE {' AND '.join(conditions)}
-            ORDER BY q.period DESC, c.name
+            WHERE {' AND '.join(active_conditions)}
+            ORDER BY
+                ROW_NUMBER() OVER (
+                    PARTITION BY q.company_id
+                    ORDER BY q.period DESC, q.topic
+                ),
+                q.period DESC,
+                c.name
             LIMIT ?
             """,
-            tuple(parameters),
-        )
-        return {"sector": sector, "results": rows}
+                tuple([*active_parameters, limit]),
+            )
+
+        rows = await fetch(conditions, parameters)
+        match_mode = "exact_phrase" if normalized_query else "latest_sector_evidence"
+
+        # Broad sector questions rarely repeat a filing sentence verbatim. If
+        # the exact phrase finds nothing, return recent stored sector evidence
+        # rather than claiming the database has no qualitative information.
+        if not rows and normalized_query and not company_ids:
+            fallback_conditions = [condition for condition in conditions if "lower(q." not in condition]
+            fallback_parameters = parameters[:1]
+            if topics:
+                fallback_parameters.extend(topics)
+            rows = await fetch(fallback_conditions, fallback_parameters)
+            match_mode = "latest_sector_evidence"
+
+        return {
+            "sector": sector,
+            "coverage": {
+                "match_mode": match_mode,
+                "results_returned": len(rows),
+            },
+            "results": rows,
+        }

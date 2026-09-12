@@ -415,6 +415,20 @@ def _validate_grounding(output: GroundedAnalysis, trace: ToolTrace, sector: str)
 
 
 MAX_VERIFIED_FACTS = 12
+MAX_BENCHMARK_FACTS = 4
+
+BROAD_SECTOR_COMPANY_PATTERNS = {
+    "operating_margin",
+    "gross_margin",
+    "free_cash_flow",
+    "fcf_margin",
+    "revenue",
+    "revenue_growth",
+    "cash",
+    "debt",
+    "market_cap",
+    "enterprise_value",
+}
 
 FACT_RELEVANCE_GROUPS: tuple[tuple[set[str], set[str]], ...] = (
     (
@@ -475,6 +489,21 @@ def _metric_matches(metric: str, patterns: set[str]) -> bool:
     return any(pattern == canonical or pattern in canonical for pattern in patterns)
 
 
+def _round_robin_facts(
+    facts: list[GroundedClaim],
+    limit: int,
+) -> list[GroundedClaim]:
+    buckets: dict[str, list[GroundedClaim]] = {}
+    for fact in facts:
+        buckets.setdefault(fact.company or "", []).append(fact)
+    selected: list[GroundedClaim] = []
+    while len(selected) < limit and any(buckets.values()):
+        for bucket in buckets.values():
+            if bucket and len(selected) < limit:
+                selected.append(bucket.pop(0))
+    return selected
+
+
 def _select_relevant_facts(
     query: str,
     facts: list[GroundedClaim],
@@ -487,6 +516,24 @@ def _select_relevant_facts(
             active_patterns.update(metric_patterns)
 
     if active_patterns:
+        # A broad sector question needs both the benchmark backdrop and issuer
+        # evidence. Treating the word "sector" as a benchmark-only filter made
+        # company comparisons appear without their supporting SEC sources.
+        if active_patterns == {"benchmark", "peer"}:
+            benchmark_facts = [
+                fact for fact in unique if _metric_matches(fact.metric, active_patterns)
+            ][:MAX_BENCHMARK_FACTS]
+            company_facts = [
+                fact
+                for fact in unique
+                if fact.company
+                and _metric_matches(fact.metric, BROAD_SECTOR_COMPANY_PATTERNS)
+            ]
+            return benchmark_facts + _round_robin_facts(
+                company_facts,
+                MAX_VERIFIED_FACTS - len(benchmark_facts),
+            )
+
         candidates = [fact for fact in unique if _metric_matches(fact.metric, active_patterns)]
         priority = {"headcount": 0, "hiring": 1, "labor": 2, "restructuring": 3}
         candidates.sort(
@@ -499,15 +546,7 @@ def _select_relevant_facts(
 
     # Broad questions need representative evidence across the covered companies,
     # rather than dozens of rows from whichever company appeared first.
-    buckets: dict[str, list[GroundedClaim]] = {}
-    for fact in unique:
-        buckets.setdefault(fact.company or "", []).append(fact)
-    selected: list[GroundedClaim] = []
-    while len(selected) < MAX_VERIFIED_FACTS and any(buckets.values()):
-        for bucket in buckets.values():
-            if bucket and len(selected) < MAX_VERIFIED_FACTS:
-                selected.append(bucket.pop(0))
-    return selected
+    return _round_robin_facts(unique, MAX_VERIFIED_FACTS)
 
 
 def _normalize_grounded_output(
