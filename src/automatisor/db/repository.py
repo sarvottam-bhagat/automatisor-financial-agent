@@ -313,18 +313,21 @@ class FinancialRepository:
         invalid_topics = sorted(set(topics) - ALLOWED_TOPICS)
         if invalid_topics:
             raise RepositoryError("invalid_metric", f"Unsupported topics: {', '.join(invalid_topics)}")
-        conditions = ["c.sector = ?"]
-        parameters: list[Any] = [sector]
+        base_conditions = ["c.sector = ?"]
+        base_parameters: list[Any] = [sector]
+        if company_ids:
+            base_conditions.append(f"q.company_id IN ({', '.join('?' for _ in company_ids)})")
+            base_parameters.extend(company_ids)
+        if topics:
+            base_conditions.append(f"q.topic IN ({', '.join('?' for _ in topics)})")
+            base_parameters.extend(topics)
+
+        conditions = list(base_conditions)
+        parameters = list(base_parameters)
         normalized_query = query.strip().casefold()
         if normalized_query:
             conditions.append("(lower(q.statement) LIKE ? OR lower(q.topic) LIKE ?)")
             parameters.extend([f"%{normalized_query}%", f"%{normalized_query}%"])
-        if company_ids:
-            conditions.append(f"q.company_id IN ({', '.join('?' for _ in company_ids)})")
-            parameters.extend(company_ids)
-        if topics:
-            conditions.append(f"q.topic IN ({', '.join('?' for _ in topics)})")
-            parameters.extend(topics)
         async def fetch(
             active_conditions: list[str],
             active_parameters: list[Any],
@@ -355,13 +358,13 @@ class FinancialRepository:
         # Broad sector questions rarely repeat a filing sentence verbatim. If
         # the exact phrase finds nothing, return recent stored sector evidence
         # rather than claiming the database has no qualitative information.
-        if not rows and normalized_query and not company_ids:
-            fallback_conditions = [condition for condition in conditions if "lower(q." not in condition]
-            fallback_parameters = parameters[:1]
-            if topics:
-                fallback_parameters.extend(topics)
-            rows = await fetch(fallback_conditions, fallback_parameters)
-            match_mode = "latest_sector_evidence"
+        if not rows and normalized_query:
+            rows = await fetch(base_conditions, base_parameters)
+            match_mode = (
+                "latest_company_evidence"
+                if company_ids
+                else "latest_sector_evidence"
+            )
 
         return {
             "sector": sector,

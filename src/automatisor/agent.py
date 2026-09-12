@@ -417,6 +417,18 @@ def _validate_grounding(output: GroundedAnalysis, trace: ToolTrace, sector: str)
 MAX_VERIFIED_FACTS = 12
 MAX_BENCHMARK_FACTS = 4
 
+QUALITATIVE_EVIDENCE_METRICS = {
+    "automation",
+    "competitive_position",
+    "customer_concentration",
+    "growth_driver",
+    "labor",
+    "operational_lever",
+    "restructuring",
+    "risk",
+    "strategy",
+}
+
 BROAD_SECTOR_COMPANY_PATTERNS = {
     "operating_margin",
     "gross_margin",
@@ -587,6 +599,11 @@ def _sanitize_narrative(output: GroundedAnalysis) -> GroundedAnalysis:
 def _apply_disclosures(output: GroundedAnalysis, trace: ToolTrace, persona: str) -> GroundedAnalysis:
     disclaimer = PERSONA_CONFIGS[persona].disclaimer
     answer = output.answer if disclaimer in output.answer else f"{output.answer}\n\n{disclaimer}"
+    has_qualitative_evidence = any(
+        _canonical_metric_label(fact.metric) in QUALITATIVE_EVIDENCE_METRICS
+        and isinstance(fact.value, str)
+        for fact in trace.facts
+    )
     limitations = [
         limitation
         for limitation in output.limitations
@@ -594,6 +611,15 @@ def _apply_disclosures(output: GroundedAnalysis, trace: ToolTrace, persona: str)
             "mcp trace" in limitation.casefold()
             or "application renders" in limitation.casefold()
             or "answer omits numeric support" in limitation.casefold()
+            or (
+                has_qualitative_evidence
+                and "qualitative evidence search" in limitation.casefold()
+                and (
+                    "no matching" in limitation.casefold()
+                    or "no results" in limitation.casefold()
+                    or "returned no" in limitation.casefold()
+                )
+            )
         )
     ]
     for warning in trace.warnings:
