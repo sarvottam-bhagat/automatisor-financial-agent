@@ -575,8 +575,21 @@ def _normalize_grounded_output(
         for company in output.companies_referenced
     ]
     claims = _select_relevant_facts(query, trace.facts)
+    status = output.status
+    if (
+        status == AnalysisStatus.INSUFFICIENT_DATA
+        and "compare_company_metrics" in trace.tools_used
+        and len(set(companies)) >= 2
+        and claims
+    ):
+        # A supported comparative conclusion remains a completed analysis even
+        # when some requested dimensions are missing. Those gaps belong in the
+        # limitations field; insufficient_data is reserved for cases where the
+        # available records cannot support a conclusion.
+        status = AnalysisStatus.COMPLETED
     return output.model_copy(
         update={
+            "status": status,
             "companies_referenced": companies,
             "source_ids": list(dict.fromkeys(claim.source_id for claim in claims)),
             "tools_used": trace.tools_used,

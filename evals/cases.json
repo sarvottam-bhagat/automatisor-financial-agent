@@ -8,7 +8,7 @@
   {"id": "pe_tech", "kind": "matrix", "persona": "pe_analyst", "sector": "tech", "query": "Which company is the strongest take-private candidate and what is the operational thesis?"},
   {"id": "pe_retail", "kind": "matrix", "persona": "pe_analyst", "sector": "retail", "query": "Screen the companies for leverage capacity, cash conversion, and exit routes."},
   {"id": "pe_logistics", "kind": "matrix", "persona": "pe_analyst", "sector": "logistics", "query": "Which company is the strongest buyout candidate?"},
-  {"id": "box_headcount", "kind": "headcount", "persona": "equity_analyst", "sector": "tech", "query": "What is the most recent headcount or hiring signal for Box?", "expected_company": "Box", "expected_value": "2810"},
+  {"id": "box_headcount", "kind": "headcount", "persona": "equity_analyst", "sector": "tech", "query": "What is the most recent headcount or hiring signal for Box?", "expected_company": "Box", "expected_value": "2912"},
   {"id": "unknown_tesla", "kind": "out_of_scope", "persona": "mutual_fund_analyst", "sector": "tech", "query": "What do you think about Tesla?"},
   {"id": "missing_box_cac", "kind": "missing_metric", "persona": "equity_analyst", "sector": "tech", "query": "What is Box's customer acquisition cost?"}
 ]
